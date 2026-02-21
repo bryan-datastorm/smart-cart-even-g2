@@ -44,10 +44,32 @@ declare module '@evenrealities/even_hub_sdk' {
     textEvent?: EvenHubTextEvent;
   }
 
+  /** Layout descriptor for an image container. */
+  export class ImageContainerProperty {
+    constructor(options: {
+      xPosition: number;
+      yPosition: number;
+      width: number;
+      height: number;
+      containerID: number;
+      containerName: string;
+    });
+  }
+
+  /** Payload for updating the raw image data of an existing image container. */
+  export class ImageRawDataUpdate {
+    constructor(options: {
+      containerID: number;
+      containerName: string;
+      imageData: number[] | string | Uint8Array | ArrayBuffer;
+    });
+  }
+
   /** Layout descriptor passed to `createStartUpPageContainer` / `rebuildPageContainer`. */
   export interface PageLayout {
     textObject: TextContainerProperty[];
     listObject: ListContainerProperty[];
+    imageObject?: ImageContainerProperty[];
     containerTotalNum: number;
   }
 
@@ -60,6 +82,7 @@ declare module '@evenrealities/even_hub_sdk' {
     createStartUpPageContainer(container: CreateStartUpPageContainer): Promise<void>;
     rebuildPageContainer(container: RebuildPageContainer): Promise<void>;
     onEvenHubEvent(callback: (event: EvenHubEvent) => void | Promise<void>): void;
+    updateImageRawData(update: ImageRawDataUpdate): Promise<void>;
   }
 
   /** Waits for the native app bridge to become available in the WebView. */
