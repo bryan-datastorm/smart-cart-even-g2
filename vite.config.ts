@@ -8,4 +8,11 @@ export default defineConfig({
     host: true, 
     port: 5173,
   },
+  build: {
+    rollupOptions: {
+      // The Even Realities SDK is injected at runtime by the G2 glasses' WebView
+      // host environment and is not available as an npm package.
+      external: ['@evenrealities/even_hub_sdk'],
+    },
+  },
 })

@@ -9,9 +9,7 @@
   "author": "Bryan Baldwin",
   "entrypoint": "index.html",
   "permissions": {
-    "network": [
-      "*"
-    ],
+    "network": [],
     "fs": [
       "./assets"
     ]
