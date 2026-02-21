@@ -1,0 +1,19 @@
+{
+  "package_id": "com.bryanbaldwin.smartcart",
+  "edition": "202601",
+  "name": "Smart Cart",
+  "version": "1.0.0",
+  "min_app_version": "0.1.0",
+  "tagline": "Hands-free grocery tracking.",
+  "description": "A glanceable, hands-free grocery list that syncs instantly from your phone to your Even Realities G2 glasses.",
+  "author": "Bryan Baldwin",
+  "entrypoint": "index.html",
+  "permissions": {
+    "network": [
+      "*"
+    ],
+    "fs": [
+      "./assets"
+    ]
+  }
+}

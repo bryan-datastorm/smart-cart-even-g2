@@ -1,0 +1,18 @@
+@import "../node_modules/@jappyjan/even-realities-ui/dist/even-realities-ui.css";
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%; /* Use exactly 100% of the provided WebView space */
+  width: 100%;
+  overflow: hidden; /* Prevent iOS page bouncing */
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bc-1); /* Let the native UI tokens handle it */
+  color: var(--color-tc-1);
+}
+
+/* Hide scrollbar for cleaner UI */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}

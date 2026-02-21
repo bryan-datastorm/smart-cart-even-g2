@@ -1,0 +1,26 @@
+{
+  "name": "smart-cart",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+  "dev": "vite --host 0.0.0.0 --port 5173",
+  "build": "vite build",
+  "qr": "evenhub qr --http --port 5173",
+  "pack": "npm run build && evenhub pack app.json dist -o smartcart.ehpk"
+  },
+  "devDependencies": {
+    "@evenrealities/evenhub-cli": "^0.1.5",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1"
+  },
+  "dependencies": {
+    "@jappyjan/even-realities-ui": "^0.0.9",
+    "framer-motion": "^12.34.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}
