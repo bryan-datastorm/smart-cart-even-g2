@@ -26,32 +26,25 @@ Designed for the Even Hub ecosystem, this app acts as a companion interface on y
 ## Development Setup
 
 1. **Clone the repository:**
-   \`\`\`bash
-   git clone https://github.com/yourusername/smart-cart.git
+   ```bash
+   git clone https://github.com/bryan-datastorm/smart-cart-even-g2
    cd smart-cart
-   \`\`\`
+   ```
 
 2. **Install dependencies:**
-   \`\`\`bash
+   ```bash
    npm install
-   \`\`\`
+   ```
 
 3. **Start the development server:**
-   \`\`\`bash
+   ```bash
    npm run dev
-   \`\`\`
+   ```
    *(Note: This runs Vite exposing your local network IP)*
 
 4. **Launch on Glasses:**
    Open a second terminal and use the Even Hub CLI to generate a QR code:
-   \`\`\`bash
+   ```bash
    npm run qr
-   \`\`\`
+   ```
    Scan the generated QR code with the Even App on your phone to instantly load the app on your G2 glasses.
-
-## Packaging for Production
-To bundle the app into a `.ehpk` file for the Even Hub developer portal, run:
-\`\`\`bash
-npm run pack
-\`\`\`
-This will output `smartcart.ehpk` in the root directory.
