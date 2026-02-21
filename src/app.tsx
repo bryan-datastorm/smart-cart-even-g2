@@ -8,6 +8,8 @@ import {
   TextContainerProperty,
   ListContainerProperty,
   ListItemContainerProperty,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
   OsEventTypeList,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk';
@@ -16,6 +18,8 @@ import type { CartItemData } from './types/cart-item';
 
 const HEADER_ID = 1;
 const LIST_ID = 2;
+const SPLASH_BG_ID = 99;
+const SPLASH_IMG_ID = 100;
 
 /** Standard iOS 6-dot drag handle grip rendered as an inline SVG icon. */
 const DragHandleIcon = () => (
@@ -125,6 +129,7 @@ export default function App() {
   const [items, setItems] = useState<CartItemData[]>([]);
   const [newItemName, setNewItemName] = useState("");
   const [deviceStatus, setDeviceStatus] = useState({ connected: false, battery: 0 });
+  const [isAppReady, setIsAppReady] = useState(false);
 
   const bridgeRef = useRef<EvenAppBridge | null>(null);
   const stateRef = useRef({ items });
@@ -133,6 +138,56 @@ export default function App() {
     stateRef.current = { items };
   }, [items]);
 
+  // --- 1. Splash Screen Flow ---
+  const showSplashScreen = async (bridge: EvenAppBridge) => {
+    // A. Build the Splash Layout
+    const splashBg = new TextContainerProperty({
+      xPosition: 0, yPosition: 0, width: 576, height: 288, 
+      borderWidth: 0, paddingLength: 0,
+      containerID: SPLASH_BG_ID, containerName: 'splash-bg', 
+      content: ' ', isEventCapture: 1, 
+    });
+
+    const splashImg = new ImageContainerProperty({
+      // Centered on the 576x288 canvas: x=(576-200)/2, y=(288-100)/2
+      xPosition: 188, yPosition: 94, width: 200, height: 100,
+      containerID: SPLASH_IMG_ID, containerName: 'splash-img'
+    });
+
+    // NOTE: We cast to 'any' and completely omit 'listObject' to match the 
+    // Snake game pattern and prevent the bridge from silently failing.
+    const splashConfig: any = {
+      containerTotalNum: 2,
+      textObject: [splashBg],
+      imageObject: [splashImg]
+    };
+
+    await bridge.createStartUpPageContainer(new CreateStartUpPageContainer(splashConfig));
+
+    // B. Fetch and push the raw image bytes (Snake game pattern)
+    try {
+      const res = await fetch('/smart-cart-ar.png');
+      
+      // Catch Vite SPA fallback issues
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error("Vite served HTML! Make sure smart-cart-ar.png is in the public/ folder.");
+      }
+
+      const buf = await res.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(buf));
+      
+      await bridge.updateImageRawData(new ImageRawDataUpdate({
+        containerID: SPLASH_IMG_ID,
+        containerName: 'splash-img',
+        imageData: bytes
+      }));
+    } catch (e) {
+      console.error("Failed to load or push splash image:", e);
+    }
+  };
+
+  // --- 2. Main List Layout Builder ---
   const buildPageLayout = (currentItems: CartItemData[]) => {
     const displayItems = currentItems.slice(0, 20); 
     const totalCount = currentItems.length;
@@ -157,11 +212,11 @@ export default function App() {
         content: "Cart is empty.\nAdd items on your phone.",
         isEventCapture: 1, paddingLength: 10,
       });
-      return { textObject: [headerContainer, emptyContainer], listObject: [], containerTotalNum: 2 };
+      // Omit listObject entirely for the empty state
+      return { textObject: [headerContainer, emptyContainer], containerTotalNum: 2 } as any;
     }
 
     const listNames = displayItems.map(item => `${item.done ? "[X]" : "[ ]"} ${item.name}`);
-
     const listContainer = new ListContainerProperty({
       xPosition: 0, yPosition: 48, width: 576, height: 240,
       borderWidth: 1, borderColor: 5, borderRdaius: 0, paddingLength: 5,
@@ -172,22 +227,16 @@ export default function App() {
       }),
     });
 
-    return { textObject: [headerContainer], listObject: [listContainer], containerTotalNum: 2 };
+    return { textObject: [headerContainer], listObject: [listContainer], containerTotalNum: 2 } as any;
   };
 
-  const syncData = async (newItems: CartItemData[], isStartup = false) => {
+  const syncData = async (newItems: CartItemData[]) => {
     setItems(newItems);
-    
     if (!bridgeRef.current) return;
     await bridgeRef.current.setLocalStorage('cart_items', JSON.stringify(newItems));
-
+    
     const layout = buildPageLayout(newItems);
-
-    if (isStartup) {
-      await bridgeRef.current.createStartUpPageContainer(new CreateStartUpPageContainer(layout));
-    } else {
-      await bridgeRef.current.rebuildPageContainer(new RebuildPageContainer(layout));
-    }
+    await bridgeRef.current.rebuildPageContainer(new RebuildPageContainer(layout));
   };
 
   useEffect(() => {
@@ -197,30 +246,36 @@ export default function App() {
       const bridge = await waitForEvenAppBridge();
       bridgeRef.current = bridge;
 
-      // 1. Fetch initial device status
+      // 1. Immediately show Splash Screen (Optimized UX)
+      await showSplashScreen(bridge);
+
+      // 2. Fetch initial device status in the background
       try {
         const device = await bridge.getDeviceInfo();
         setDeviceStatus({ connected: device.status.isConnected(), battery: device.status.batteryLevel });
-        
-        // 2. Subscribe to real-time status changes
         unsubscribeStatus = bridge.onDeviceStatusChanged((status) => {
           setDeviceStatus({ connected: status.isConnected(), battery: status.batteryLevel });
         });
-      } catch (e) {
-        console.warn("Could not fetch device info (simulator environment?).");
+      } catch (e) { 
+        console.warn("Could not fetch device info."); 
       }
 
-      // 3. Load items
-      let initialItems: CartItemData[] = [];
-      try {
-        const savedStr = await bridge.getLocalStorage('cart_items');
-        if (savedStr) initialItems = JSON.parse(savedStr) as CartItemData[];
-      } catch (e) { console.error("No saved data found"); }
+      // 3. Keep Splash Screen up for 3 seconds
+      setTimeout(async () => {
+        let initialItems: CartItemData[] = [];
+        try {
+          const savedStr = await bridge.getLocalStorage('cart_items');
+          if (savedStr) initialItems = JSON.parse(savedStr) as CartItemData[];
+        } catch (e) { console.error("No saved data found"); }
 
-      await syncData(initialItems, true);
+        // Transition from Splash to the main Grocery List
+        await syncData(initialItems);
+        setIsAppReady(true); // Unlock phone UI
+      }, 3000); 
 
       // 4. Handle input events
       bridge.onEvenHubEvent(async (event) => {
+        if (!isAppReady) return; // Prevent clicks while splash is active
         const currentItems = [...stateRef.current.items];
         if (currentItems.length === 0) return;
 
@@ -248,10 +303,8 @@ export default function App() {
     };
     initGlasses();
 
-    return () => {
-      if (unsubscribeStatus) unsubscribeStatus();
-    };
-  }, []);
+    return () => { if (unsubscribeStatus) unsubscribeStatus(); };
+  }, [isAppReady]);
 
   const handleAdd = async () => {
     if (!newItemName.trim()) return;
@@ -279,7 +332,9 @@ export default function App() {
   return (
     <div style={{ 
       position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-      display: 'flex', flexDirection: 'column', maxWidth: '600px', margin: '0 auto'
+      display: 'flex', flexDirection: 'column', maxWidth: '600px', margin: '0 auto',
+      opacity: isAppReady ? 1 : 0.5, pointerEvents: isAppReady ? 'auto' : 'none',
+      transition: 'opacity 0.5s ease-in'
     }}>
       
       {/* HEADER & LIST AREA */}
