@@ -18,17 +18,15 @@ import type { CartItemData } from './types/cart-item';
 
 const HEADER_ID = 1;
 const LIST_ID = 2;
-const SPLASH_BG_ID = 99;
-const SPLASH_IMG_ID = 100;
+const SPLASH_BG_ID = 3;
+const SPLASH_IMG_ID = 4;
 
-/** Standard iOS 6-dot drag handle grip rendered as an inline SVG icon. */
 const DragHandleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
   </svg>
 );
 
-/** Props accepted by the {@link CartItem} component. */
 interface CartItemProps {
   item: CartItemData;
   items: CartItemData[];
@@ -36,10 +34,6 @@ interface CartItemProps {
   handleRemove: (id: number) => void;
 }
 
-/**
- * Renders a single grocery list entry with swipe-to-delete (left drag reveals red
- * trash background) and a reorder drag handle on the right.
- */
 const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
   const controls = useDragControls();
 
@@ -51,7 +45,6 @@ const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
       dragControls={controls} 
       style={{ position: 'relative', overflow: 'hidden' }}
     >
-      {/* BACKGROUND: Red Delete Reveal */}
       <div style={{ 
         position: 'absolute', top: 0, bottom: 0, right: 0, left: 0, 
         backgroundColor: 'var(--color-tc-red, #ef4444)', 
@@ -61,7 +54,6 @@ const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
         <div style={{ color: '#fff' }}><TrashIcon /></div>
       </div>
 
-      {/* FOREGROUND: The list item */}
       <motion.div 
         drag="x"
         dragConstraints={{ left: 0, right: 0 }} 
@@ -75,19 +67,16 @@ const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
           borderBottom: '1px solid var(--color-sc-2)', zIndex: 1, position: 'relative'
         }}
       >
-        {/* Checkbox and Name */}
         <div 
           style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }}
           onClick={() => {
-            const newItems = [...items];
-            const idx = newItems.findIndex(i => i.id === item.id);
-            newItems[idx].done = !newItems[idx].done;
+            // Updated to use array map instead of direct mutation
+            const newItems = items.map(i => i.id === item.id ? { ...i, done: !i.done } : i);
             syncData(newItems);
           }}
         >
-          {/* iOS Style Square Checkbox */}
           <div style={{
-            width: '22px', height: '22px', borderRadius: '6px', /* Changed to 6px for square look */
+            width: '22px', height: '22px', borderRadius: '6px',
             border: `2px solid ${item.done ? 'var(--color-tc-green, #4ade80)' : 'var(--color-tc-2)'}`,
             backgroundColor: item.done ? 'var(--color-tc-green, #4ade80)' : 'transparent',
             display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
@@ -103,7 +92,6 @@ const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
           </Text>
         </div>
 
-        {/* Drag Handle */}
         <div 
           onPointerDown={(e) => controls.start(e)} 
           style={{ color: 'var(--color-tc-2)', padding: '12px', cursor: 'grab', touchAction: 'none' }}
@@ -115,16 +103,6 @@ const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
   );
 };
 
-/**
- * Root application component for Smart Cart.
- *
- * Manages the grocery list state and synchronises it bidirectionally with the
- * Even Realities G2 glasses via the EvenHub bridge:
- * – Phone → Glasses: any list mutation calls `syncData` which pushes a layout
- *   rebuild to the glasses' micro-LED display.
- * – Glasses → Phone: glasses tap events received via `onEvenHubEvent` toggle the
- *   item's `done` state and trigger a re-render + layout sync.
- */
 export default function App() {
   const [items, setItems] = useState<CartItemData[]>([]);
   const [newItemName, setNewItemName] = useState("");
@@ -133,14 +111,29 @@ export default function App() {
 
   const bridgeRef = useRef<EvenAppBridge | null>(null);
   const stateRef = useRef({ items });
+  
+  // Refs to handle closures and React StrictMode double execution safely
+  const isAppReadyRef = useRef(false);
+  const initStartedRef = useRef(false);
 
   useEffect(() => {
     stateRef.current = { items };
   }, [items]);
 
-  // --- 1. Splash Screen Flow ---
   const showSplashScreen = async (bridge: EvenAppBridge) => {
-    // A. Build the Splash Layout
+    let imageBytes: number[] = [];
+    try {
+      const res = await fetch('/smart-cart-ar.png');
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('text/html')) {
+        throw new Error("Vite served HTML! Make sure smart-cart-ar.png is in the public/ folder.");
+      }
+      const buf = await res.arrayBuffer();
+      imageBytes = Array.from(new Uint8Array(buf));
+    } catch (e) {
+      console.error("Failed to load splash image:", e);
+    }
+
     const splashBg = new TextContainerProperty({
       xPosition: 0, yPosition: 0, width: 576, height: 288, 
       borderWidth: 0, paddingLength: 0,
@@ -149,13 +142,10 @@ export default function App() {
     });
 
     const splashImg = new ImageContainerProperty({
-      // Centered on the 576x288 canvas: x=(576-200)/2, y=(288-100)/2
       xPosition: 188, yPosition: 94, width: 200, height: 100,
       containerID: SPLASH_IMG_ID, containerName: 'splash-img'
     });
 
-    // NOTE: We cast to 'any' and completely omit 'listObject' to match the 
-    // Snake game pattern and prevent the bridge from silently failing.
     const splashConfig: any = {
       containerTotalNum: 2,
       textObject: [splashBg],
@@ -164,30 +154,15 @@ export default function App() {
 
     await bridge.createStartUpPageContainer(new CreateStartUpPageContainer(splashConfig));
 
-    // B. Fetch and push the raw image bytes (Snake game pattern)
-    try {
-      const res = await fetch('/smart-cart-ar.png');
-      
-      // Catch Vite SPA fallback issues
-      const contentType = res.headers.get('content-type');
-      if (contentType && contentType.includes('text/html')) {
-        throw new Error("Vite served HTML! Make sure smart-cart-ar.png is in the public/ folder.");
-      }
-
-      const buf = await res.arrayBuffer();
-      const bytes = Array.from(new Uint8Array(buf));
-      
+    if (imageBytes.length > 0) {
       await bridge.updateImageRawData(new ImageRawDataUpdate({
         containerID: SPLASH_IMG_ID,
         containerName: 'splash-img',
-        imageData: bytes
+        imageData: imageBytes
       }));
-    } catch (e) {
-      console.error("Failed to load or push splash image:", e);
     }
   };
 
-  // --- 2. Main List Layout Builder ---
   const buildPageLayout = (currentItems: CartItemData[]) => {
     const displayItems = currentItems.slice(0, 20); 
     const totalCount = currentItems.length;
@@ -212,7 +187,6 @@ export default function App() {
         content: "Cart is empty.\nAdd items on your phone.",
         isEventCapture: 1, paddingLength: 10,
       });
-      // Omit listObject entirely for the empty state
       return { textObject: [headerContainer, emptyContainer], containerTotalNum: 2 } as any;
     }
 
@@ -240,16 +214,18 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Prevent React 18 StrictMode double-mounting
+    if (initStartedRef.current) return;
+    initStartedRef.current = true;
+
     let unsubscribeStatus: (() => void) | null = null;
 
     const initGlasses = async () => {
       const bridge = await waitForEvenAppBridge();
       bridgeRef.current = bridge;
 
-      // 1. Immediately show Splash Screen (Optimized UX)
       await showSplashScreen(bridge);
 
-      // 2. Fetch initial device status in the background
       try {
         const device = await bridge.getDeviceInfo();
         setDeviceStatus({ connected: device.status.isConnected(), battery: device.status.batteryLevel });
@@ -260,7 +236,6 @@ export default function App() {
         console.warn("Could not fetch device info."); 
       }
 
-      // 3. Keep Splash Screen up for 3 seconds
       setTimeout(async () => {
         let initialItems: CartItemData[] = [];
         try {
@@ -268,14 +243,13 @@ export default function App() {
           if (savedStr) initialItems = JSON.parse(savedStr) as CartItemData[];
         } catch (e) { console.error("No saved data found"); }
 
-        // Transition from Splash to the main Grocery List
         await syncData(initialItems);
-        setIsAppReady(true); // Unlock phone UI
+        setIsAppReady(true); 
+        isAppReadyRef.current = true; // Set the ref for the event closure
       }, 3000); 
 
-      // 4. Handle input events
       bridge.onEvenHubEvent(async (event) => {
-        if (!isAppReady) return; // Prevent clicks while splash is active
+        if (!isAppReadyRef.current) return; // Safely read from the ref instead of the stale state closure
         const currentItems = [...stateRef.current.items];
         if (currentItems.length === 0) return;
 
@@ -294,8 +268,11 @@ export default function App() {
 
              const targetItem = currentItems[clickedIndex];
              if (targetItem) {
-               currentItems[clickedIndex].done = !currentItems[clickedIndex].done;
-               await syncData(currentItems);
+               // Updated to use array map instead of direct object mutation
+               const newItems = currentItems.map((item, i) => 
+                 i === clickedIndex ? { ...item, done: !item.done } : item
+               );
+               await syncData(newItems);
              }
           }
         }
@@ -304,7 +281,7 @@ export default function App() {
     initGlasses();
 
     return () => { if (unsubscribeStatus) unsubscribeStatus(); };
-  }, [isAppReady]);
+  }, []); // <-- Empty Dependency Array! No more infinite loops.
 
   const handleAdd = async () => {
     if (!newItemName.trim()) return;
@@ -349,7 +326,6 @@ export default function App() {
           </div>
           
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-            {/* Real-time Battery Badge */}
             <div style={{ 
               backgroundColor: deviceStatus.connected ? 'var(--color-tc-green, #4ade80)' : 'var(--color-sc-2)', 
               color: deviceStatus.connected ? '#000' : 'var(--color-tc-2)', 
@@ -359,7 +335,6 @@ export default function App() {
               👓 {deviceStatus.connected ? `${deviceStatus.battery}%` : 'Disconnected'}
             </div>
 
-            {/* Clear Completed Button */}
             {hasCompletedItems && (
               <button 
                 onClick={handleClearCompleted}
@@ -398,11 +373,11 @@ export default function App() {
         )}
       </div>
 
-      {/* STICKY BOTTOM INPUT BAR with Elevation Shadow */}
+      {/* STICKY BOTTOM INPUT BAR */}
       <div style={{ 
         padding: '16px', borderTop: '1px solid var(--color-sc-2)', display: 'flex', gap: '12px',
         alignItems: 'center', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
-        boxShadow: '0 -4px 12px rgba(0,0,0,0.05)', /* The floating elevation shadow */
+        boxShadow: '0 -4px 12px rgba(0,0,0,0.05)',
         backgroundColor: 'var(--color-bc-1)', zIndex: 10 
       }}>
         <Input 
