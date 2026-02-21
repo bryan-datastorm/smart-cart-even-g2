@@ -1,35 +1,48 @@
-// src/App.tsx
+// src/app.tsx
 import { useState, useEffect, useRef } from 'react';
 import { Button, Input, Card, CardContent, Text, TrashIcon } from '@jappyjan/even-realities-ui';
-import { 
-  waitForEvenAppBridge, 
-  CreateStartUpPageContainer, 
+import {
+  waitForEvenAppBridge,
+  CreateStartUpPageContainer,
   RebuildPageContainer,
-  TextContainerProperty, 
+  TextContainerProperty,
   ListContainerProperty,
   ListItemContainerProperty,
-  OsEventTypeList
+  OsEventTypeList,
+  type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk';
 import { Reorder, useDragControls, motion } from 'framer-motion';
+import type { CartItemData } from './types/cart-item';
 
 const HEADER_ID = 1;
 const LIST_ID = 2;
 
-// Standard iOS 6-dot drag handle grip
+/** Standard iOS 6-dot drag handle grip rendered as an inline SVG icon. */
 const DragHandleIcon = () => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
     <path d="M8 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM8 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 6a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 12a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM16 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" />
   </svg>
 );
 
-// Extracted Item Component 
-const CartItem = ({ item, index, items, syncData, handleRemove }: any) => {
+/** Props accepted by the {@link CartItem} component. */
+interface CartItemProps {
+  item: CartItemData;
+  items: CartItemData[];
+  syncData: (newItems: CartItemData[]) => void;
+  handleRemove: (id: number) => void;
+}
+
+/**
+ * Renders a single grocery list entry with swipe-to-delete (left drag reveals red
+ * trash background) and a reorder drag handle on the right.
+ */
+const CartItem = ({ item, items, syncData, handleRemove }: CartItemProps) => {
   const controls = useDragControls();
 
   return (
     <Reorder.Item 
       value={item} 
-      id={item.id}
+      id={String(item.id)}
       dragListener={false} 
       dragControls={controls} 
       style={{ position: 'relative', overflow: 'hidden' }}
@@ -49,7 +62,7 @@ const CartItem = ({ item, index, items, syncData, handleRemove }: any) => {
         drag="x"
         dragConstraints={{ left: 0, right: 0 }} 
         dragElastic={{ left: 0.8, right: 0 }} 
-        onDragEnd={(e, info) => {
+        onDragEnd={(_e, info) => {
           if (info.offset.x < -75) handleRemove(item.id);
         }}
         style={{ 
@@ -98,19 +111,29 @@ const CartItem = ({ item, index, items, syncData, handleRemove }: any) => {
   );
 };
 
+/**
+ * Root application component for Smart Cart.
+ *
+ * Manages the grocery list state and synchronises it bidirectionally with the
+ * Even Realities G2 glasses via the EvenHub bridge:
+ * – Phone → Glasses: any list mutation calls `syncData` which pushes a layout
+ *   rebuild to the glasses' micro-LED display.
+ * – Glasses → Phone: glasses tap events received via `onEvenHubEvent` toggle the
+ *   item's `done` state and trigger a re-render + layout sync.
+ */
 export default function App() {
-  const [items, setItems] = useState<any[]>([]); 
+  const [items, setItems] = useState<CartItemData[]>([]);
   const [newItemName, setNewItemName] = useState("");
   const [deviceStatus, setDeviceStatus] = useState({ connected: false, battery: 0 });
 
-  const bridgeRef = useRef<any>(null);
+  const bridgeRef = useRef<EvenAppBridge | null>(null);
   const stateRef = useRef({ items });
 
   useEffect(() => {
     stateRef.current = { items };
   }, [items]);
 
-  const buildPageLayout = (currentItems: any[]) => {
+  const buildPageLayout = (currentItems: CartItemData[]) => {
     const displayItems = currentItems.slice(0, 20); 
     const totalCount = currentItems.length;
     const doneCount = currentItems.filter(i => i.done).length;
@@ -152,7 +175,7 @@ export default function App() {
     return { textObject: [headerContainer], listObject: [listContainer], containerTotalNum: 2 };
   };
 
-  const syncData = async (newItems: any[], isStartup = false) => {
+  const syncData = async (newItems: CartItemData[], isStartup = false) => {
     setItems(newItems);
     
     if (!bridgeRef.current) return;
@@ -168,7 +191,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    let unsubscribeStatus: any = null;
+    let unsubscribeStatus: (() => void) | null = null;
 
     const initGlasses = async () => {
       const bridge = await waitForEvenAppBridge();
@@ -180,7 +203,7 @@ export default function App() {
         setDeviceStatus({ connected: device.status.isConnected(), battery: device.status.batteryLevel });
         
         // 2. Subscribe to real-time status changes
-        unsubscribeStatus = bridge.onDeviceStatusChanged((status: any) => {
+        unsubscribeStatus = bridge.onDeviceStatusChanged((status) => {
           setDeviceStatus({ connected: status.isConnected(), battery: status.batteryLevel });
         });
       } catch (e) {
@@ -188,16 +211,16 @@ export default function App() {
       }
 
       // 3. Load items
-      let initialItems: any[] = [];
+      let initialItems: CartItemData[] = [];
       try {
         const savedStr = await bridge.getLocalStorage('cart_items');
-        if (savedStr) initialItems = JSON.parse(savedStr);
+        if (savedStr) initialItems = JSON.parse(savedStr) as CartItemData[];
       } catch (e) { console.error("No saved data found"); }
 
       await syncData(initialItems, true);
 
       // 4. Handle input events
-      bridge.onEvenHubEvent(async (event: any) => {
+      bridge.onEvenHubEvent(async (event) => {
         const currentItems = [...stateRef.current.items];
         if (currentItems.length === 0) return;
 
@@ -247,7 +270,7 @@ export default function App() {
     await syncData(newItems);
   };
 
-  const handleReorder = async (reorderedItems: any[]) => {
+  const handleReorder = async (reorderedItems: CartItemData[]) => {
     await syncData(reorderedItems);
   };
 
@@ -305,11 +328,10 @@ export default function App() {
           <Card style={{ border: 'none', background: 'transparent' }}>
             <CardContent style={{ padding: 0 }}>
               <Reorder.Group axis="y" values={items} onReorder={handleReorder} style={{ listStyleType: 'none', padding: 0, margin: 0 }}>
-                {items.map((item, idx) => (
+                {items.map((item) => (
                   <CartItem 
                     key={item.id} 
                     item={item} 
-                    index={idx} 
                     items={items} 
                     syncData={syncData} 
                     handleRemove={handleRemove} 
@@ -330,7 +352,7 @@ export default function App() {
       }}>
         <Input 
           value={newItemName} 
-          onChange={(e: any) => setNewItemName(e.target.value)} 
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewItemName(e.target.value)}
           placeholder="Add grocery item..."
           style={{ flexGrow: 1, fontSize: '16px' }}
           onKeyDown={(e: React.KeyboardEvent) => { if (e.key === 'Enter') handleAdd(); }}
