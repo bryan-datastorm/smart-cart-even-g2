@@ -4,6 +4,12 @@ A glanceable, hands-free grocery list that syncs instantly from your phone to yo
 
 Designed for the Even Hub ecosystem, this app acts as a companion interface on your iOS/Android device while rendering a distraction-free, native list UI directly on your G2 glasses.
 
+## Visual Preview
+
+| Phone Companion App | Glasses Display (Simulator) |
+|:---:|:---:|
+| ![Phone Companion App](./public/companion_app.png) | ![Glasses Display (Simulator)](./public/g2_display.png) |
+
 ## Features
 * **Glanceable UI:** Clean, 4-bit greyscale list rendered on the G2 micro-LED displays.
 * **Native Hardware Scrolling:** Utilizes the G2's native `ListContainerProperty` for flawless scroll highlighting via the temple touch controls or R1 ring.
